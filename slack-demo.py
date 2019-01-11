@@ -1,15 +1,16 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import requests
 import time
 import os
 import json
 import datetime
+from PIL import Image
 
 # Path to slack token
 tloc = os.path.expanduser("~/.slacktoken")
 if not os.path.isfile(tloc):
-    print "Error: Slack token file " + tloc + " does not exist."
+    print("Error: Slack token file " + tloc + " does not exist.")
     exit(1)
 
 slacktoken=open(tloc).read().strip()
@@ -19,7 +20,7 @@ form_header={'content-type': 'application/x-www-form-urlencoded'}
 def slack_json_helper(resp, method):
     j = json.loads(resp.content)
     if (j['ok'] is not True):
-        print "Error: Slack API method " + method + " failed."
+        print("Error: Slack API method " + method + " failed.")
         exit(1)
     return j
 
@@ -42,6 +43,7 @@ if not os.path.isdir(img_dir):
 
 # Get the current time
 ts_from = int(time.time())
+ts_from = 0
 
 # Channel to monitor for images
 channel = "hurricane-demo"
@@ -64,9 +66,9 @@ else:
 
 if cid is None and uid is None:
     if user is None:
-        print "Could not find channel: " + channel
+        print("Could not find channel: " + channel)
     else:
-        print "Could not find user: " + user
+        print("Could not find user: " + user)
     exit(1)
 
 while True:
@@ -76,16 +78,24 @@ while True:
     else:
         data["user"] = uid
 
-    files = slack_api_post("files.list", data)['files']
+    files = sorted(slack_api_post("files.list", data)['files'], key=lambda x: int(x['timestamp']))
+
+    im = None
 
     if len(files) > 0:
-        x = files[-1]
+        x = files[0]
         img = requests.get(x['url_private'], headers=auth_header)
-        with open(os.path.join(img_dir, x['name']), 'w') as f:
+        path = os.path.join(img_dir, x['name'])
+        with open(path, 'wb') as f:
             f.write(img.content)
 
         ts_from = int(x['timestamp']) + 1
-        # TODO do stuff with images here instead of exiting
-        exit(0)
+
+        # TODO do stuff with images here
+        if im is not None:
+            im.close()
+        im = Image.open(path)
+        im.show() # TODO this spawns a process you can't kill via Python
+
 
     time.sleep(2)
