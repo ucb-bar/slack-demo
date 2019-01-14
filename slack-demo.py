@@ -37,19 +37,23 @@ class SlackDemoApplication(tk.Frame):
         # Path to slack token
         self.root = tk.Tk()
         self.w = self.root.winfo_screenwidth()/2
-        self.h = self.root.winfo_screenheight()
-        self.root.geometry("%dx%d+0+0" % (self.w,self.h))
+        self.h = self.root.winfo_screenheight() - 100
+        self.ch = 30 # canvas height for text
+        self.root.geometry("%dx%d+0+0" % (self.w,self.h + self.ch))
         self.root.title("Hurricane 2 Demo")
         self.root.configure(cursor="none")
         self.root.configure(background="black")
         self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_rowconfigure(2, weight=1)
+        self.root.grid_rowconfigure(1, weight=1)
+        self.root.grid_rowconfigure(3, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_columnconfigure(2, weight=1)
-        self.panel = tk.Label(self.root)
+        self.panel = tk.Label(self.root, borderwidth=0)
+        self.canvas = tk.Canvas(self.root, width=self.w, height=self.ch, background="black", borderwidth=0)
 
         tk.Frame.__init__(self, self.root)
         self.panel.grid(column=1, row=1)
+        self.canvas.grid(column=1, row=2)
         self.grid()
 
         tloc = os.path.expanduser("~/.slacktoken")
@@ -118,7 +122,9 @@ class SlackDemoApplication(tk.Frame):
 
             # display the image
             img = Image.open(path)
-            scale = float(self.w)/float(img.width)
+            scale = float(self.h)/float(img.height)
+            if float(img.width)/float(img.height) > float(self.w)/float(self.h):
+                scale = float(self.w)/float(img.width)
             new_w = int(round(img.width*scale))
             new_h = int(round(img.height*scale))
             im = ImageTk.PhotoImage(img.resize((new_w, new_h), Image.ANTIALIAS))
@@ -142,6 +148,13 @@ class SlackDemoApplication(tk.Frame):
                 img.astype(np.float32)
                 img = img.transpose([2, 0, 1])
                 img.tofile(path + '.img')
+
+                # TODO scp to board
+                # "scp " + path + ".img root@" + self.zc706_ip + ":~/images"
+                # TODO ssh to board and run demo command
+                # "ssh root@" + self.zc706_ip + " -C " + self.nn_cmd
+                thing = "TODO"
+                self.canvas.create_text((self.w/2, self.ch/2 + 2), text="Detected " + thing, justify="center", fill="white", font=("Andale Mono", 28))
 
         # every 2 seconds (2000ms) check for new pictures
         self.root.after(2000, self.update)
