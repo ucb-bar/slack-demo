@@ -3,10 +3,12 @@
 import requests
 import time
 import os
+import subprocess
 import json
 import datetime
 import numpy as np
 import scipy.ndimage as si
+import cv2
 from PIL import Image, ImageTk
 import tkinter as tk
 
@@ -135,24 +137,36 @@ class SlackDemoApplication(tk.Frame):
             if path[-4:].lower() != '.jpg':
                 print("File %s is not a JPEG. FIXME! Skipping this one..." % path)
             else:
-                # crop
-                if img.width > img.height:
-                    margin = int((img.width - img.height)/2)
-                    img = img.crop((margin, 0, margin + img.height, img.height))
-                else:
-                    margin = int((img.height - img.width)/2)
-                    img = img.crop((0, margin, img.width, margin + img.width))
-
-                img = img.resize((277, 277), Image.ANTIALIAS)
-                img = np.array(img) - np.array([104, 117, 123])
-                img.astype(np.float32)
-                img = img.transpose([2, 0, 1])
+                #Jerry's code
+                img = si.imread(path)
+                img = img.astype(float)
+                img = cv2.resize(img, dsize=(227, 227), interpolation=cv2.INTER_CUBIC)
+                img = img - np.array([104, 117, 123])
+                img = img.astype(np.float32)
+                img = img.transpose((2, 0, 1))
                 img.tofile(path + '.img')
 
-                # TODO scp to board
-                # "scp " + path + ".img root@" + self.zc706_ip + ":~/images"
-                # TODO ssh to board and run demo command
-                # "ssh root@" + self.zc706_ip + " -C " + self.nn_cmd
+                #Fake board
+                board = "bwrcrdsl-2"
+                board_img_path = "/tools/projects/colins/bringup/hurricane-2/demo/images"
+                board_demo_path = "/tools/projects/colins/bringup/hurricane-2/demo"
+                board_runner_path = "/tools/projects/colins/bringup/hurricane-2/tools-install/bin/spike"
+                board_runner_args = "--extension=hwacha /tools/projects/colins/bringup/hurricane-2/tools-install/riscv64-unknown-elf/bin/pk squeezenet_32"
+                #Real Board
+                #board = "hzc"
+                #board_img_path = "~/hurricane-2/demo/images"
+                #board_demo_path = "~/hurricane-2/demo"
+                #board_runner_path = "../../fesvr-h2"
+                #board_runner_args = "+power_cycle=1 +uncore_clksel=0 +divisor=8 ../riscv64-unknown-elf/bin/pk squeezenet_32"
+                scp_cmd = ["scp", "{}.img".format(path), "{b}:{p}/{i}.img".format(b=board,p=board_img_path,i=x['name'])]
+                print(" ".join(scp_cmd))
+                scp_result = subprocess.run(scp_cmd, stdout=subprocess.PIPE)
+                print(scp_result.stdout.decode('utf-8'))
+                ssh_cmd = ["ssh", board, "-C", "cd {d} && {r} {a} images/{i}.img".format(d=board_demo_path,r=board_runner_path,a=board_runner_args,i=x['name'])]
+                print(" ".join(ssh_cmd))
+                ssh_result = subprocess.run(ssh_cmd, stdout=subprocess.PIPE)
+                print(ssh_result.stdout.decode('utf-8'))
+
                 thing = "TODO"
                 self.canvas.create_text((self.w/2, self.ch/2 + 2), text="Detected " + thing, justify="center", fill="white", font=("Andale Mono", 28))
 
