@@ -169,6 +169,7 @@ class SlackDemoApplication(tk.Frame):
                 print(ssh_lines[-2:])
 
                 thing = ssh_lines[-2]
+                self.canvas.delete("all")
                 self.canvas.create_text((self.w/2, self.ch/2 + 2), text=thing, justify="center", fill="white", font=("Andale Mono", 28))
 
         # every 2 seconds (2000ms) check for new pictures
