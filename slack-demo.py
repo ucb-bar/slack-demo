@@ -5,6 +5,8 @@ import time
 import os
 import json
 import datetime
+import numpy as np
+import scipy.ndimage as si
 from PIL import Image, ImageTk
 import tkinter as tk
 
@@ -114,7 +116,7 @@ class SlackDemoApplication(tk.Frame):
 
             self.ts_from = int(x['timestamp']) + 1
 
-            # TODO do stuff with images here
+            # display the image
             img = Image.open(path)
             scale = float(self.w)/float(img.width)
             new_w = int(round(img.width*scale))
@@ -123,11 +125,26 @@ class SlackDemoApplication(tk.Frame):
             self.panel.configure(image = im)
             self.panel.image = im
 
+            # create the input file for the NN
+            if path[-4:].lower() != '.jpg':
+                print("File %s is not a JPEG. FIXME! Skipping this one..." % path)
+            else:
+                # crop
+                if img.width > img.height:
+                    margin = int((img.width - img.height)/2)
+                    img = img.crop((margin, 0, margin + img.height, img.height))
+                else:
+                    margin = int((img.height - img.width)/2)
+                    img = img.crop((0, margin, img.width, margin + img.width))
+
+                img = img.resize((277, 277), Image.ANTIALIAS)
+                img = np.array(img) - np.array([104, 117, 123])
+                img.astype(np.float32)
+                img = img.transpose([2, 0, 1])
+                img.tofile(path + '.img')
+
         # every 2 seconds (2000ms) check for new pictures
         self.root.after(2000, self.update)
-
-
-
 
 if __name__ == "__main__":
     app = SlackDemoApplication()
