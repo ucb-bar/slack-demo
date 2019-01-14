@@ -165,10 +165,11 @@ class SlackDemoApplication(tk.Frame):
                 ssh_cmd = ["ssh", board, "-C", "cd {d} && {r} {a} images/{i}.img".format(d=board_demo_path,r=board_runner_path,a=board_runner_args,i=x['name'])]
                 print(" ".join(ssh_cmd))
                 ssh_result = subprocess.run(ssh_cmd, stdout=subprocess.PIPE)
-                print(ssh_result.stdout.decode('utf-8'))
+                ssh_lines = ssh_result.stdout.decode('utf-8').split('\n')
+                print(ssh_lines[-2:])
 
-                thing = "TODO"
-                self.canvas.create_text((self.w/2, self.ch/2 + 2), text="Detected " + thing, justify="center", fill="white", font=("Andale Mono", 28))
+                thing = ssh_lines[-2]
+                self.canvas.create_text((self.w/2, self.ch/2 + 2), text=thing, justify="center", fill="white", font=("Andale Mono", 28))
 
         # every 2 seconds (2000ms) check for new pictures
         self.root.after(2000, self.update)
