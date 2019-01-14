@@ -164,11 +164,17 @@ class SlackDemoApplication(tk.Frame):
                 print(scp_result.stdout.decode('utf-8'))
                 ssh_cmd = ["ssh", board, "-C", "cd {d} && {r} {a} images/{i}.img".format(d=board_demo_path,r=board_runner_path,a=board_runner_args,i=x['name'])]
                 print(" ".join(ssh_cmd))
-                ssh_result = subprocess.run(ssh_cmd, stdout=subprocess.PIPE)
-                ssh_lines = ssh_result.stdout.decode('utf-8').split('\n')
-                print(ssh_lines[-2:])
+                ssh_result = subprocess.Popen(ssh_cmd, stdout=subprocess.PIPE)
+                ssh_lines = ""
+                while True:
+                    line = ssh_result.stdout.readline().decode("utf-8")
+                    if line != '':
+                        print(line.rstrip())
+                        ssh_lines += line
+                    else:
+                        break
 
-                thing = ssh_lines[-2]
+                thing = ssh_lines.split('\n')[-2]
                 self.canvas.delete("all")
                 self.canvas.create_text((self.w/2, self.ch/2 + 2), text=thing, justify="center", fill="white", font=("Andale Mono", 28))
 
