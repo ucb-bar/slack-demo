@@ -3,6 +3,7 @@
 import requests
 import time
 import os
+import sys
 import subprocess
 import json
 import datetime
@@ -76,6 +77,9 @@ class SlackDemoApplication(tk.Frame):
         self.ts_from = int(time.time())
         self.ts_from = 0
 
+        # Flag for which image we are on
+        self.first_image = True
+
         # Channel to monitor for images
         channel = "hurricane-demo"
         user = None
@@ -102,7 +106,7 @@ class SlackDemoApplication(tk.Frame):
                 print("Could not find user: " + user)
             exit(1)
 
-    def update(self):
+    def do_it(self):
         data = {"types": "images", "ts_from": str(self.ts_from)}
         if self.uid is None:
             data["channel"] = self.cid
@@ -132,10 +136,16 @@ class SlackDemoApplication(tk.Frame):
             im = ImageTk.PhotoImage(img.resize((new_w, new_h), Image.ANTIALIAS))
             self.panel.configure(image = im)
             self.panel.image = im
+            if(self.first_image):
+                self.update()
+                self.first_image = False
 
             # create the input file for the NN
             if path[-4:].lower() != '.jpg':
                 print("File %s is not a JPEG. FIXME! Skipping this one..." % path)
+                time.sleep(3)
+                self.canvas.delete("all")
+                self.update()
             else:
                 #Jerry's code
                 img = si.imread(path)
@@ -146,21 +156,23 @@ class SlackDemoApplication(tk.Frame):
                 img = img.transpose((2, 0, 1))
                 img.tofile(path + '.img')
 
-                #Fake board
-                board = "bwrcrdsl-2"
-                board_img_path = "/tools/projects/colins/bringup/hurricane-2/demo/images"
-                board_demo_path = "/tools/projects/colins/bringup/hurricane-2/demo"
-                board_runner_path = "/tools/projects/colins/bringup/hurricane-2/tools-install/bin/spike"
-                board_runner_args = "--extension=hwacha /tools/projects/colins/bringup/hurricane-2/tools-install/riscv64-unknown-elf/bin/pk squeezenet_32"
-                #Real Board
-                #board = "hzc"
-                #board_img_path = "~/hurricane-2/demo/images"
-                #board_demo_path = "~/hurricane-2/demo"
-                #board_runner_path = "../../fesvr-h2"
-                #board_runner_args = "+power_cycle=1 +uncore_clksel=0 +divisor=8 ../riscv64-unknown-elf/bin/pk squeezenet_32"
+                if(len(sys.argv) >= 2 and sys.argv[1] == 'spike'):
+                    #Fake board
+                    board = "bwrcrdsl-2"
+                    board_img_path = "/tools/projects/colins/bringup/hurricane-2/demo/images"
+                    board_demo_path = "/tools/projects/colins/bringup/hurricane-2/demo"
+                    board_runner_path = "/tools/projects/colins/bringup/hurricane-2/tools-install/bin/spike"
+                    board_runner_args = "--extension=hwacha /tools/projects/colins/bringup/hurricane-2/tools-install/riscv64-unknown-elf/bin/pk squeezenet_32"
+                else:
+                    #Real Board
+                    board = "hzc"
+                    board_img_path = "~/hurricane-2/demo/images"
+                    board_demo_path = "~/hurricane-2/demo"
+                    board_runner_path = "../../fesvr-h2"
+                    board_runner_args = "+power_cycle=1 +uncore_clksel=4 +divisor=8 ../riscv64-unknown-elf/bin/pk squeezenet_32"
                 scp_cmd = ["scp", "{}.img".format(path), "{b}:{p}/{i}.img".format(b=board,p=board_img_path,i=x['name'])]
                 print(" ".join(scp_cmd))
-                scp_result = subprocess.run(scp_cmd, stdout=subprocess.PIPE)
+                scp_result = subprocess.run(scp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 print(scp_result.stdout.decode('utf-8'))
                 ssh_cmd = ["ssh", board, "-C", "cd {d} && {r} {a} images/{i}.img".format(d=board_demo_path,r=board_runner_path,a=board_runner_args,i=x['name'])]
                 print(" ".join(ssh_cmd))
@@ -170,19 +182,26 @@ class SlackDemoApplication(tk.Frame):
                     line = ssh_result.stdout.readline().decode("utf-8")
                     if line != '':
                         print(line.rstrip())
+                        if('maxpool' in line):
+                            self.canvas.delete("all")
+                            self.update()
                         ssh_lines += line
                     else:
                         break
 
-                thing = ssh_lines.split('\n')[-2]
+                if(len(sys.argv) >= 2 and sys.argv[1] == 'spike'):
+                    thing = ssh_lines.split('\n')[-2]
+                else:
+                    thing = ssh_lines.split('\n')[-10]
                 self.canvas.delete("all")
                 self.canvas.create_text((self.w/2, self.ch/2 + 2), text=thing, justify="center", fill="white", font=("Andale Mono", 28))
+                self.update()
 
         # every 2 seconds (2000ms) check for new pictures
-        self.root.after(2000, self.update)
+        self.root.after(2000, self.do_it)
 
 if __name__ == "__main__":
     app = SlackDemoApplication()
-    app.after(0, app.update)
+    app.after(0, app.do_it)
     app.mainloop()
 
