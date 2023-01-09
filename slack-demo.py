@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import slack_sdk
 import requests
 import time
 import os
@@ -12,6 +13,7 @@ import scipy.ndimage as si
 import cv2
 from PIL import Image, ImageTk
 import tkinter as tk
+import pathlib
 
 
 class SlackDemoApplication(tk.Frame):
@@ -20,6 +22,7 @@ class SlackDemoApplication(tk.Frame):
         j = json.loads(resp.content)
         if (j['ok'] is not True):
             print("Error: Slack API method " + method + " failed.")
+            print(j)
             exit(1)
         return j
 
@@ -35,31 +38,9 @@ class SlackDemoApplication(tk.Frame):
         resp = requests.post("https://slack.com/api/" + method, data=data, headers=header)
         return self.slack_json_helper(resp, "POST " + method)
 
-
     def __init__(self):
         # Path to slack token
-        self.root = tk.Tk()
-        self.w = self.root.winfo_screenwidth()/2
-        self.h = self.root.winfo_screenheight() - 100
-        self.ch = 30 # canvas height for text
-        self.root.geometry("%dx%d+0+0" % (self.w,self.h + self.ch))
-        self.root.title("Hurricane 2 Demo")
-        self.root.configure(cursor="none")
-        self.root.configure(background="black")
-        self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_rowconfigure(1, weight=1)
-        self.root.grid_rowconfigure(3, weight=1)
-        self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_columnconfigure(2, weight=1)
-        self.panel = tk.Label(self.root, borderwidth=0)
-        self.canvas = tk.Canvas(self.root, width=self.w, height=self.ch, background="black", borderwidth=0)
-
-        tk.Frame.__init__(self, self.root)
-        self.panel.grid(column=1, row=1)
-        self.canvas.grid(column=1, row=2)
-        self.grid()
-
-        tloc = os.path.expanduser("~/.slacktoken")
+        tloc = os.path.expanduser("/scratch/abejgonza/slack-demo/.slack-token")
         if not os.path.isfile(tloc):
             print("Error: Slack token file " + tloc + " does not exist.")
             exit(1)
@@ -68,6 +49,14 @@ class SlackDemoApplication(tk.Frame):
         self.auth_header={'Authorization': 'Bearer ' + self.slacktoken}
         self.form_header={'content-type': 'application/x-www-form-urlencoded'}
 
+        self.client = slack_sdk.WebClient(token=self.slacktoken)
+
+        response1 = self.client.auth_revoke(test='true')
+        assert not response1['revoked']
+
+        response2 = self.client.auth_test()
+        assert response2.get('ok', False)
+
         # Make the tmp directory
         self.img_dir = "img_tmp"
         if not os.path.isdir(self.img_dir):
@@ -75,133 +64,64 @@ class SlackDemoApplication(tk.Frame):
 
         # Get the current time
         self.ts_from = int(time.time())
-        self.ts_from = 0
-
-        # Flag for which image we are on
-        self.first_image = True
 
         # Channel to monitor for images
-        channel = "hurricane-demo"
-        user = None
+        channel = "winter-retreat-2023-firesim-demo"
         self.cid = None
-        self.uid = None
 
-        if channel is None:
-            users = self.slack_api_get("users.list")
-            for u in users['members']:
-                if (u['name'] == user):
-                    self.uid = u['id']
-                    break
-        else:
-            channels = self.slack_api_get("conversations.list")
-            for c in channels['channels']:
-                if (c['name'] == channel):
-                    self.cid = c['id']
-                    break
+        channels = []
+        # look for public channels only
+        for page in self.client.conversations_list():
+            channels = channels + page['channels']
 
-        if self.cid is None and self.uid is None:
-            if user is None:
-                print("Could not find channel: " + channel)
-            else:
-                print("Could not find user: " + user)
+        for c in channels:
+           if (c['name'] == channel):
+               self.cid = c['id']
+               break
+
+        if self.cid is None:
+            print("Could not find channel: " + channel)
             exit(1)
 
     def do_it(self):
-        data = {"types": "images", "ts_from": str(self.ts_from)}
-        if self.uid is None:
-            data["channel"] = self.cid
-        else:
-            data["user"] = self.uid
+        print(f"Listing files from: {self.ts_from}")
 
-        files = sorted(self.slack_api_post("files.list", data)['files'], key=lambda x: int(x['timestamp']))
+        files = []
+        for page in self.client.files_list(channel=self.cid, types="images", ts_from=self.ts_from):
+            files = files + page['files']
+
+        #print(files)
+
+        files = sorted(files, key=lambda x: int(x['timestamp']))
+        #print("\nDEBUG")
+        #print([print(f"{f['name']}: {f['timestamp']}") for f in files])
+        ##print([print(f"{f['name']}: {self.ts_from - int(f['timestamp'])}") for f in files])
+        #print("DONE DEBUG\n")
 
         im = None
 
         if len(files) > 0:
-            x = files[0]
+            x = files[-1] # look at the most recent file
+            print(f"Looking at file: {x['name']}")
             img = requests.get(x['url_private'], headers=self.auth_header)
-            path = os.path.join(self.img_dir, x['name'])
+            path = pathlib.PosixPath(os.path.join(self.img_dir, x['name']))
             with open(path, 'wb') as f:
                 f.write(img.content)
 
+            # add some delay before the next image
             self.ts_from = int(x['timestamp']) + 1
 
-            # display the image
-            img = Image.open(path)
-            scale = float(self.h)/float(img.height)
-            if float(img.width)/float(img.height) > float(self.w)/float(self.h):
-                scale = float(self.w)/float(img.width)
-            new_w = int(round(img.width*scale))
-            new_h = int(round(img.height*scale))
-            im = ImageTk.PhotoImage(img.resize((new_w, new_h), Image.ANTIALIAS))
-            self.panel.configure(image = im)
-            self.panel.image = im
-            if(self.first_image):
-                self.update()
-                self.first_image = False
-
             # create the input file for the NN
-            if path[-4:].lower() != '.jpg':
-                print("File %s is not a JPEG. FIXME! Skipping this one..." % path)
-                time.sleep(3)
-                self.canvas.delete("all")
-                self.update()
+            print(path.suffix)
+            if path.suffix == '.jpg' or path.suffix == '.jpeg':
+                # TODO: do something
+                print(f"Operating on file {x['name']}")
             else:
-                #Jerry's code
-                img = si.imread(path)
-                img = img.astype(float)
-                img = cv2.resize(img, dsize=(227, 227), interpolation=cv2.INTER_CUBIC)
-                img = img - np.array([104, 117, 123])
-                img = img.astype(np.float32)
-                img = img.transpose((2, 0, 1))
-                img.tofile(path + '.img')
-
-                if(len(sys.argv) >= 2 and sys.argv[1] == 'spike'):
-                    #Fake board
-                    board = "bwrcrdsl-2"
-                    board_img_path = "/tools/projects/colins/bringup/hurricane-2/demo/images"
-                    board_demo_path = "/tools/projects/colins/bringup/hurricane-2/demo"
-                    board_runner_path = "/tools/projects/colins/bringup/hurricane-2/tools-install/bin/spike"
-                    board_runner_args = "--extension=hwacha /tools/projects/colins/bringup/hurricane-2/tools-install/riscv64-unknown-elf/bin/pk squeezenet_32"
-                else:
-                    #Real Board
-                    board = "hzc"
-                    board_img_path = "~/hurricane-2/demo/images"
-                    board_demo_path = "~/hurricane-2/demo"
-                    board_runner_path = "../../fesvr-h2"
-                    board_runner_args = "+power_cycle=1 +uncore_clksel=4 +divisor=8 ../riscv64-unknown-elf/bin/pk squeezenet_32"
-                scp_cmd = ["scp", "{}.img".format(path), "{b}:{p}/{i}.img".format(b=board,p=board_img_path,i=x['name'])]
-                print(" ".join(scp_cmd))
-                scp_result = subprocess.run(scp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                print(scp_result.stdout.decode('utf-8'))
-                ssh_cmd = ["ssh", board, "-C", "cd {d} && {r} {a} images/{i}.img".format(d=board_demo_path,r=board_runner_path,a=board_runner_args,i=x['name'])]
-                print(" ".join(ssh_cmd))
-                ssh_result = subprocess.Popen(ssh_cmd, stdout=subprocess.PIPE)
-                ssh_lines = ""
-                while True:
-                    line = ssh_result.stdout.readline().decode("utf-8")
-                    if line != '':
-                        print(line.rstrip())
-                        if('maxpool' in line):
-                            self.canvas.delete("all")
-                            self.update()
-                        ssh_lines += line
-                    else:
-                        break
-
-                if(len(sys.argv) >= 2 and sys.argv[1] == 'spike'):
-                    thing = ssh_lines.split('\n')[-2]
-                else:
-                    thing = ssh_lines.split('\n')[-10]
-                self.canvas.delete("all")
-                self.canvas.create_text((self.w/2, self.ch/2 + 2), text=thing, justify="center", fill="white", font=("Andale Mono", 28))
-                self.update()
-
-        # every 2 seconds (2000ms) check for new pictures
-        self.root.after(2000, self.do_it)
+                print(f"File {path} is not a .jpg or .jpeg. Skipping...")
 
 if __name__ == "__main__":
     app = SlackDemoApplication()
-    app.after(0, app.do_it)
-    app.mainloop()
-
+    while True:
+        print("Loopin'")
+        app.do_it()
+        time.sleep(10)
