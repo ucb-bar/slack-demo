@@ -4,43 +4,14 @@ import slack_sdk
 import requests
 import time
 import os
-import sys
-import subprocess
-import json
-import datetime
-import numpy as np
-import scipy.ndimage as si
-import cv2
-from PIL import Image, ImageTk
-import tkinter as tk
 import pathlib
 
 
-class SlackDemoApplication(tk.Frame):
-
-    def slack_json_helper(self, resp, method):
-        j = json.loads(resp.content)
-        if (j['ok'] is not True):
-            print("Error: Slack API method " + method + " failed.")
-            print(j)
-            exit(1)
-        return j
-
-    def slack_api_get(self, method, data={}):
-        header = self.auth_header.copy()
-        header.update(self.form_header)
-        resp = requests.get("https://slack.com/api/" + method, data=data, headers=header)
-        return self.slack_json_helper(resp, "GET" + method)
-
-    def slack_api_post(self, method, data={}):
-        header = self.auth_header.copy()
-        header.update(self.form_header)
-        resp = requests.post("https://slack.com/api/" + method, data=data, headers=header)
-        return self.slack_json_helper(resp, "POST " + method)
+class SlackDemoApplication:
 
     def __init__(self):
         # Path to slack token
-        tloc = os.path.expanduser("/scratch/abejgonza/slack-demo/.slack-token")
+        tloc = os.path.expanduser("/scratch/abe/winter-retreat-2023-firesim-gemmini-demo/slack-demo/.slack-token")
         if not os.path.isfile(tloc):
             print("Error: Slack token file " + tloc + " does not exist.")
             exit(1)
