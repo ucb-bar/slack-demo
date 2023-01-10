@@ -7,11 +7,16 @@ import os
 import pathlib
 import subprocess
 
+retreat_dir = "/scratch/abe/winter-retreat-2023-firesim-gemmini-demo"
+g_scripts_dir = f"{retreat_dir}/gemmini-other/demo"
+g_sw_dir = f"{retreat_dir}/firesim/target-design/chipyard/generators/gemmini/software/gemmini-rocc-tests/"
+fdir = f"{retreat_dir}/firesim/"
+
 class SlackDemoApplication:
 
     def __init__(self):
         # Path to slack token
-        tloc = os.path.expanduser("/scratch/abe/winter-retreat-2023-firesim-gemmini-demo/slack-demo/.slack-token")
+        tloc = os.path.expanduser(f"{retreat_dir}/slack-demo/.slack-token")
         if not os.path.isfile(tloc):
             print("Error: Slack token file " + tloc + " does not exist.")
             exit(1)
@@ -59,69 +64,94 @@ class SlackDemoApplication:
     def do_it(self):
         print(f"Listing files from ts: {self.ts_from}")
 
+        cursor = None
+        # result messages, oldest to newest
+        results_group = []
         files = []
-        for page in self.client.files_list(channel=self.cid, types="images", ts_from=self.ts_from):
-        #for page in self.client.files_list(channel=self.cid, types="images"):
-            files = files + page['files']
+        # for page in self.client.files_list(channel=self.cid, types="images", ts_from=self.ts_from):
+        # #for page in self.client.files_list(channel=self.cid, types="images"):
+        #     files = files + page['files']
+        #
+        # sorted_files = sorted(files, key=lambda x: int(x['timestamp']))
+        while True:
+            if cursor == None:
+                result = self.client.conversations_history(channel=self.cid, oldest=self.ts_from, inclusive = False)
+            else:
+                result = self.client.conversations_history(channel=self.cid, oldest=self.ts_from, cursor=cursor, inclusive = False)
+            conversation_history = result["messages"]
+            if result["has_more"]:
+                cursor = result["response_metadata"]["next_cursor"]
+            else:
+                cursor = None
+            #print(conversation_history)
+            results_group = conversation_history[::-1] + results_group
 
-        sorted_files = sorted(files, key=lambda x: int(x['timestamp']))
+            if cursor is None:
+                break
 
-        im = None
+        if len(results_group) > 0:
+            self.ts_from = float(results_group[-1]["ts"])
+
+            for message in results_group:
+                print("\n\n\n\n-------------------------------------")
+                print(message)
+
+                if 'files' not in message.keys():
+                    continue
+
+                for file in message['files']:
+                    files.append(file)
+                    print("    file:-------------------------")
+                    print(file)
+
+        print(files)
+        sorted_files = files
 
         if len(sorted_files) > 0:
-            #print([print(f"{f['name']}: {f['timestamp']}") for f in sorted_files])
+            x = sorted_files[0]
 
-            x = sorted_files[0] # look at the most recent file
             print(f"Looking at file: {x['name']}")
-            img = requests.get(x['url_private'], headers=self.auth_header)
+
+            # get png preview associated w/ image (all images converted to this)
+            thumb_img_url = x[sorted([e for e in x.keys() if "thumb" in e])[0]]
+
+            img = requests.get(thumb_img_url, headers=self.auth_header)
             path = pathlib.PosixPath(os.path.join(self.img_dir, x['name']))
+            path = path.with_suffix(".png") # rename to png (to match thumbnail)
             with open(path, 'wb') as f:
                 f.write(img.content)
 
-            # add some delay before the next image
-            self.ts_from = int(x['timestamp']) + 1
-
             # create the input file for the NN
-            if path.suffix == '.jpg' or path.suffix == '.jpeg':
-                # TODO: do something
-                print(f"Operating on file {x['name']}")
-
-                def run_and_fail(*args, **kwargs):
-                    t = subprocess.run(*args, **kwargs)
-                    if t.returncode != 0:
-                        print("Error!")
-                    return t
-
-                retreat_dir = "/scratch/abe/winter-retreat-2023-firesim-gemmini-demo"
-                g_scripts_dir = f"{retreat_dir}/gemmini-other/demo"
-                g_sw_dir = f"{retreat_dir}/firesim/target-design/chipyard/generators/gemmini/software/gemmini-rocc-tests/"
-                fdir = f"{retreat_dir}/firesim/"
-
-                run_and_fail(f"rm -rf {fdir}/deploy/results-workload/*", shell=True)
-                run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image.jpg", shell=True)
-                run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image2.jpg", shell=True)
-                run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image3.jpg", shell=True)
-                run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image4.jpg", shell=True)
-                run_and_fail(f"source $(conda info --base)/etc/profile.d/conda.sh && conda activate /home/abe/miniforge3/envs/torch && cd {g_scripts_dir} && python3 gen_images.py", shell=True)
-                run_and_fail(f"cp {g_scripts_dir}/images.h {g_sw_dir}/imagenet/images.h", shell=True)
-                run_and_fail(f"cd {g_sw_dir} && ./build.sh imagenet", shell=True)
-                run_and_fail(f"cd {retreat_dir} && ./temp.sh", shell=True)
-                t = subprocess.run(f"grep -r -h 'P .: ' {fdir}/deploy/results-workload", shell=True, capture_output=True)
+            def run_and_fail(*args, **kwargs):
+                t = subprocess.run(*args, **kwargs)
                 if t.returncode != 0:
-                    print("Unable to get predictions")
-                else:
-                    print(t.stdout)
-                    preds = str(t.stdout, 'UTF-8').strip().split("\n")
-                    for pred in preds:
-                        print(f"Reading prediction: {pred}")
-                        prednum = int(pred.split()[-1])
-                        o = run_and_fail(f"source $(conda info --base)/etc/profile.d/conda.sh && conda activate /home/abe/miniforge3/envs/torch && cd {g_scripts_dir} && python3 print_class.py {prednum}", shell=True, capture_output=True)
-                        labelname = str(o.stdout, 'UTF-8')
-                        self.client.chat_postMessage(channel=self.cid, text=f"IMG: `{x['name']}` is _100%, no question_... `{labelname.strip()}`!")
-                        break
+                    print("Error!")
+                return t
 
+            run_and_fail(f"rm -rf {fdir}/deploy/results-workload/*", shell=True)
+            run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image.png", shell=True)
+            run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image2.png", shell=True)
+            run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image3.png", shell=True)
+            run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image4.png", shell=True)
+            run_and_fail(f"source $(conda info --base)/etc/profile.d/conda.sh && conda activate /home/abe/miniforge3/envs/torch && cd {g_scripts_dir} && python3 gen_images.py", shell=True)
+            run_and_fail(f"cp {g_scripts_dir}/images.h {g_sw_dir}/imagenet/images.h", shell=True)
+            run_and_fail(f"cd {g_sw_dir} && ./build.sh imagenet", shell=True)
+            run_and_fail(f"cd {retreat_dir} && ./temp.sh", shell=True)
+            t = subprocess.run(f"grep -r -h 'P .: ' {fdir}/deploy/results-workload", shell=True, capture_output=True)
+            if t.returncode != 0:
+                print("Unable to get predictions")
             else:
-                print(f"File {path} is not a .jpg or .jpeg. Skipping...")
+                print(t.stdout)
+                preds = str(t.stdout, 'UTF-8').strip().split("\n")
+                for pred in preds:
+                    print(f"Reading prediction: {pred}")
+                    prednum = int(pred.split()[-1])
+                    o = run_and_fail(f"source $(conda info --base)/etc/profile.d/conda.sh && conda activate /home/abe/miniforge3/envs/torch && cd {g_scripts_dir} && python3 print_class.py {prednum}", shell=True, capture_output=True)
+                    labelname = str(o.stdout, 'UTF-8')
+                    self.client.chat_postMessage(channel=self.cid, text=f"IMG: `{x['name']}` is _100%, no question_... `{labelname.strip()}`!")
+
+                    # since all 4 predictions are the same immediatedly exit
+                    break
 
 if __name__ == "__main__":
     app = SlackDemoApplication()
