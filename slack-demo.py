@@ -34,7 +34,7 @@ class SlackDemoApplication:
             os.makedirs(self.img_dir)
 
         # Get the current time
-        self.ts_from = int(time.time())
+        self.ts_from = 0 #int(time.time())
 
         # Channel to monitor for images
         channel = "winter-retreat-2023-firesim-demo"
@@ -57,19 +57,45 @@ class SlackDemoApplication:
     def do_it(self):
         print(f"Listing files from: {self.ts_from}")
 
+
+        cursor = None
+        # result messages, oldest to newest
+        results_group = []
         files = []
-        for page in self.client.files_list(channel=self.cid, types="images", ts_from=self.ts_from):
-            files = files + page['files']
+        while True:
+            if cursor == None: 
+                result = self.client.conversations_history(channel=self.cid, oldest=self.ts_from, inclusive = False)
+            else:
+                result = self.client.conversations_history(channel=self.cid, oldest=self.ts_from, cursor=cursor, inclusive = False)
+            conversation_history = result["messages"]
+            if result["has_more"]:
+                cursor = result["response_metadata"]["next_cursor"]
+            else:
+                cursor = None
+            #print(conversation_history)
+            results_group = conversation_history[::-1] + results_group
 
-        #print(files)
+            if cursor is None:
+                break
 
-        files = sorted(files, key=lambda x: int(x['timestamp']))
-        #print("\nDEBUG")
-        #print([print(f"{f['name']}: {f['timestamp']}") for f in files])
-        ##print([print(f"{f['name']}: {self.ts_from - int(f['timestamp'])}") for f in files])
-        #print("DONE DEBUG\n")
+        if len(results_group) > 0:
+            self.ts_from = float(results_group[-1]["ts"])
 
-        im = None
+            for message in results_group:
+                print("\n\n\n\n-------------------------------------")
+                print(message)
+        
+                if 'files' not in message.keys():
+                    continue
+
+                for file in message['files']:
+                    files.append(file)
+                    print("    file:-------------------------")
+                    print(file)
+
+        print(files)
+
+        #im = None
 
         if len(files) > 0:
             x = files[-1] # look at the most recent file
@@ -78,9 +104,6 @@ class SlackDemoApplication:
             path = pathlib.PosixPath(os.path.join(self.img_dir, x['name']))
             with open(path, 'wb') as f:
                 f.write(img.content)
-
-            # add some delay before the next image
-            self.ts_from = int(x['timestamp']) + 1
 
             # create the input file for the NN
             print(path.suffix)
@@ -93,6 +116,10 @@ class SlackDemoApplication:
 if __name__ == "__main__":
     app = SlackDemoApplication()
     while True:
-        print("Loopin'")
-        app.do_it()
-        time.sleep(10)
+        try:
+            print("Loopin'")
+            app.do_it()
+            time.sleep(10)
+        except:
+            pass
+
