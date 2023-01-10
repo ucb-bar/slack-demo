@@ -1,3 +1,6 @@
 img_tmp
 .DS_Store
 .slack-token
+__pycache__
+*.png
+images.h

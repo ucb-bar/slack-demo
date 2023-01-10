@@ -8,15 +8,16 @@ import pathlib
 import subprocess
 
 retreat_dir = "/scratch/abe/winter-retreat-2023-firesim-gemmini-demo"
-g_scripts_dir = f"{retreat_dir}/gemmini-other/demo"
-g_sw_dir = f"{retreat_dir}/firesim/target-design/chipyard/generators/gemmini/software/gemmini-rocc-tests/"
+sd_scripts_dir = f"{retreat_dir}/slack-demo"
+g_scripts_dir = f"{sd_scripts_dir}"
 fdir = f"{retreat_dir}/firesim/"
+g_sw_dir = f"{fdir}/target-design/chipyard/generators/gemmini/software/gemmini-rocc-tests/"
 
 class SlackDemoApplication:
 
     def __init__(self):
         # Path to slack token
-        tloc = os.path.expanduser(f"{retreat_dir}/slack-demo/.slack-token")
+        tloc = os.path.expanduser(f"{sd_scripts_dir}/.slack-token")
         if not os.path.isfile(tloc):
             print("Error: Slack token file " + tloc + " does not exist.")
             exit(1)
@@ -116,10 +117,12 @@ class SlackDemoApplication:
             thumb_img_url = x[sorted([e for e in x.keys() if "thumb" in e])[0]]
 
             img = requests.get(thumb_img_url, headers=self.auth_header)
-            path = pathlib.PosixPath(os.path.join(self.img_dir, x['name']))
+            path = pathlib.PosixPath(os.path.join(self.img_dir, x['name'].replace(" ", "")))
             path = path.with_suffix(".png") # rename to png (to match thumbnail)
             with open(path, 'wb') as f:
                 f.write(img.content)
+
+            print(f"Wrote file: {path}")
 
             # create the input file for the NN
             def run_and_fail(*args, **kwargs):
@@ -129,6 +132,7 @@ class SlackDemoApplication:
                 return t
 
             run_and_fail(f"rm -rf {fdir}/deploy/results-workload/*", shell=True)
+            run_and_fail(f"mkdir -p {g_scripts_dir}/audience_images/audience_images/", shell=True)
             run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image.png", shell=True)
             run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image2.png", shell=True)
             run_and_fail(f"cp {path.resolve()} {g_scripts_dir}/audience_images/audience_images/image3.png", shell=True)
