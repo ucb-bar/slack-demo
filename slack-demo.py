@@ -44,10 +44,10 @@ class SlackDemoApplication:
         self.ts_from = int(time.time())
 
         # Channel to monitor for images
-        channel = "winter-retreat-2023-firesim-demo"
+        channel = "hpca-2023-demo-req"
         self.cid = None
 
-        post_channel = "winter-retreat-2023-firesim-demo-resp"
+        post_channel = "hpca-2023-demo-resp"
         self.post_cid = None
 
         self.old_hash = None
