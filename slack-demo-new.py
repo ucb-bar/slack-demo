@@ -10,7 +10,8 @@ import subprocess
 retreat_dir = "/home/firetower/Documents"
 sd_scripts_dir = f"{retreat_dir}/slack-demo"
 g_scripts_dir = f"{sd_scripts_dir}"
-fdir = f"{retreat_dir}/firesim/"
+#fdir = f"{retreat_dir}/firesim/"
+fdir = f"{retreat_dir}/firesim-pre-1.16.0/"
 g_sw_dir = f"{fdir}/target-design/chipyard/generators/gemmini/software/gemmini-rocc-tests/"
 conda_torch = "/home/firetower/miniforge3/envs/torch"
 

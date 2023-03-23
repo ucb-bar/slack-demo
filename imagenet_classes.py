@@ -37,7 +37,7 @@ classes = [
 "hyena",
 "meerkat",
 "giant_schnauzer",
-"titi",
+"titi_monkey", #"titi", # renamed since this might be potentially bad
 "three-toed_sloth",
 "sorrel",
 "black-footed_ferret",
@@ -383,7 +383,7 @@ classes = [
 "shovel",
 "plow",
 "chain_saw",
-"cock",
+"male_chicken", #"cock",
 "hen",
 "ostrich",
 "brambling",
@@ -3017,4 +3017,3 @@ def to_imagenet_class(label):
 def to_mobilenet_class(label):
     synset = imagenet_synset[label-1]
     return mobilenet_synset.index(synset)
-
